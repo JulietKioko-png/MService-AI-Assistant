@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.julietkioko.mserviceai.domain.model.ServiceCategory
 
 /**
  * Type-safe navigation destinations for the app.
@@ -14,7 +15,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
  * screen is handled in `when` expressions (exhaustive matching).
  * This prevents navigation bugs that string-based routes can introduce.
  *
- * [route] is the string key used by Compose Navigation's [NavHost].
+ * [route] is the string key used by Compose Navigation's [androidx.navigation.compose.NavHost].
  * [title] is the human-readable label for app bars and bottom nav.
  * [icon]  is the Material icon for bottom navigation items.
  */
@@ -24,12 +25,25 @@ sealed class Screen(
     val icon: ImageVector
 ) {
     data object Home : Screen("home", "Home", Icons.Filled.Home)
-    data object Services : Screen("services", "Services", Icons.AutoMirrored.Filled.List)
+
+    data object Services : Screen("services?category={category}", "Services", Icons.AutoMirrored.Filled.List) {
+        const val BASE_ROUTE = "services"
+        const val ARG_CATEGORY = "category"
+
+        /** Build route with optional category filter. */
+        fun createRoute(category: ServiceCategory? = null): String {
+            return if (category != null) "$BASE_ROUTE?$ARG_CATEGORY=${category.name}" else BASE_ROUTE
+        }
+    }
+
     data object Search : Screen("search", "Search", Icons.Filled.Search)
+
     data object Assistant : Screen("assistant", "Assistant", Icons.Filled.Info)
 
     /** Detail screen — not shown in bottom nav; navigated to from other screens. */
     data object Details : Screen("details/{serviceId}", "Details", Icons.Filled.Info) {
+        const val ARG_SERVICE_ID = "serviceId"
+
         /** Build the concrete route for a specific service. */
         fun createRoute(serviceId: String): String = "details/$serviceId"
     }

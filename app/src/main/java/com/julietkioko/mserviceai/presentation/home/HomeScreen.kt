@@ -15,19 +15,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.Apartment
-import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.Business
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -39,9 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.julietkioko.mserviceai.domain.model.ServiceCategory
 
 /**
  * Home screen — the first thing users see when they open MService AI.
@@ -52,36 +43,28 @@ import androidx.compose.ui.unit.dp
  * 3. AI assistant promotion card — drives discovery of the chat feature.
  *
  * This composable is stateless: it receives callbacks for navigation
- * events and does not hold its own state. This makes it easy to test
- * and to preview in Android Studio's @Preview.
- *
- * Architecture note: HomeScreen lives under `presentation/home/` because
- * it is a UI component tied to the Home feature. It knows nothing about
- * data sources or repositories — it only renders what it's given.
+ * events and does not hold its own state.
  */
 
-// ── Data class for category items ───────────────────────────────────
-
-private data class ServiceCategory(
-    val name: String,
-    val icon: ImageVector,
+private data class HomeCategoryItem(
+    val category: ServiceCategory,
     val description: String
 )
 
-private val categories = listOf(
-    ServiceCategory("Tax & Revenue", Icons.Filled.AccountBalance, "KRA services, tax filing, compliance"),
-    ServiceCategory("Health Insurance", Icons.Filled.Favorite, "SHIF/NHIF, cover, claims"),
-    ServiceCategory("ID & Passport", Icons.Filled.Badge, "National ID, passport, civil registration"),
-    ServiceCategory("Education", Icons.Filled.School, "HELB, university, KNEC results"),
-    ServiceCategory("Business", Icons.Filled.Business, "Permits, registration, licensing"),
-    ServiceCategory("Land & Housing", Icons.Filled.Apartment, "Title search, rates, housing"),
+private val homeCategories = listOf(
+    HomeCategoryItem(ServiceCategory.TAX_REVENUE, "KRA services, tax filing, compliance"),
+    HomeCategoryItem(ServiceCategory.HEALTH_INSURANCE, "SHIF/NHIF, cover, claims"),
+    HomeCategoryItem(ServiceCategory.ID_PASSPORT, "National ID, passport, civil registration"),
+    HomeCategoryItem(ServiceCategory.EDUCATION, "HELB, university, KNEC results"),
+    HomeCategoryItem(ServiceCategory.BUSINESS, "Permits, registration, licensing"),
+    HomeCategoryItem(ServiceCategory.LAND_HOUSING, "Title search, rates, housing")
 )
 
 // ── Home Screen ─────────────────────────────────────────────────────
 
 @Composable
 fun HomeScreen(
-    onCategoryClick: (String) -> Unit = {},
+    onCategoryClick: (ServiceCategory) -> Unit = {},
     onAskAssistantClick: () -> Unit = {}
 ) {
     LazyColumn(
@@ -101,20 +84,26 @@ fun HomeScreen(
             )
         }
 
-        // Category grid — fixed height to avoid nested-scroll issues
+        // Category grid
         item {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.height(340.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                userScrollEnabled = false
-            ) {
-                items(categories) { category ->
-                    CategoryCard(
-                        category = category,
-                        onClick = { onCategoryClick(category.name) }
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                homeCategories.chunked(2).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowItems.forEach { item ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                CategoryCard(
+                                    item = item,
+                                    onClick = { onCategoryClick(item.category) }
+                                )
+                            }
+                        }
+                        if (rowItems.size < 2) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }
@@ -173,7 +162,7 @@ private fun HeroCard() {
 
 @Composable
 private fun CategoryCard(
-    category: ServiceCategory,
+    item: HomeCategoryItem,
     onClick: () -> Unit
 ) {
     Card(
@@ -198,21 +187,21 @@ private fun CategoryCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = category.icon,
-                    contentDescription = category.name,
+                    imageVector = item.category.icon,
+                    contentDescription = item.category.displayName,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = category.name,
+                text = item.category.displayName,
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = category.description,
+                text = item.description,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2

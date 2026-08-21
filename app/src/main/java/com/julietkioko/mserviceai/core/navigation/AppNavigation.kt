@@ -15,29 +15,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.julietkioko.mserviceai.domain.model.ServiceCategory
 import com.julietkioko.mserviceai.presentation.home.HomeScreen
+import com.julietkioko.mserviceai.presentation.services.ServicesScreen
 
 /**
  * Root composable that sets up the app's navigation structure.
  *
  * Architecture decisions:
- * - Uses a single [NavHost] inside a [Scaffold] with a bottom
- *   [NavigationBar]. This is the standard pattern for tab-based Android
- *   apps — the scaffold stays fixed while screen content swaps.
- * - The [NavController] lives here (via [rememberNavController]) so it
- *   survives configuration changes (rotation, dark mode toggle).
- * - Each bottom-nav tap uses `launchSingleTop = true` and
- *   `popUpTo(startDestination)` to avoid stacking duplicate screens
- *   on the back stack — this matches the behaviour users expect from
- *   bottom-navigation apps.
- *
- * Production value: Centralising navigation here means adding a new
- * screen is a two-step process: (1) add a route to [Screen],
- * (2) add a `composable(...)` block below. No other files change.
+ * - Uses a single [NavHost] inside a [Scaffold] with a bottom [NavigationBar].
+ * - Each bottom-nav tap uses `launchSingleTop = true` and `popUpTo(startDestination)`
+ *   to avoid stacking duplicate screens on the back stack.
+ * - Centralizes navigation routing and arguments handling across screens.
  */
 @Composable
 fun MServiceApp() {
@@ -47,7 +42,13 @@ fun MServiceApp() {
 
     // Hide bottom bar on detail screens (they have their own back nav)
     val showBottomBar = Screen.bottomNavItems.any { screen ->
-        currentDestination?.hierarchy?.any { it.route == screen.route } == true
+        currentDestination?.hierarchy?.any {
+            if (screen == Screen.Services) {
+                it.route?.startsWith(Screen.Services.BASE_ROUTE) == true
+            } else {
+                it.route == screen.route
+            }
+        } == true
     }
 
     Scaffold(
@@ -56,8 +57,18 @@ fun MServiceApp() {
                 NavigationBar {
                     Screen.bottomNavItems.forEach { screen ->
                         val selected = currentDestination?.hierarchy?.any {
-                            it.route == screen.route
+                            if (screen == Screen.Services) {
+                                it.route?.startsWith(Screen.Services.BASE_ROUTE) == true
+                            } else {
+                                it.route == screen.route
+                            }
                         } == true
+
+                        val destinationRoute = if (screen == Screen.Services) {
+                            Screen.Services.createRoute()
+                        } else {
+                            screen.route
+                        }
 
                         NavigationBarItem(
                             icon = {
@@ -69,9 +80,7 @@ fun MServiceApp() {
                             label = { Text(screen.title) },
                             selected = selected,
                             onClick = {
-                                navController.navigate(screen.route) {
-                                    // Pop up to start destination to avoid building
-                                    // a large back stack when switching tabs
+                                navController.navigate(destinationRoute) {
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
                                     }
@@ -93,9 +102,8 @@ fun MServiceApp() {
             // ── Home ────────────────────────────────────────────
             composable(Screen.Home.route) {
                 HomeScreen(
-                    onCategoryClick = { categoryName ->
-                        // Phase 2: navigate to Services with category filter
-                        navController.navigate(Screen.Services.route) {
+                    onCategoryClick = { category ->
+                        navController.navigate(Screen.Services.createRoute(category)) {
                             popUpTo(navController.graph.findStartDestination().id) {
                                 saveState = true
                             }
@@ -115,9 +123,26 @@ fun MServiceApp() {
                 )
             }
 
-            // ── Services (placeholder — Phase 2) ────────────────
-            composable(Screen.Services.route) {
-                PlaceholderScreen(title = "Services", subtitle = "Browse government services")
+            // ── Services (Phase 2) ──────────────────────────────
+            composable(
+                route = Screen.Services.route,
+                arguments = listOf(
+                    navArgument(Screen.Services.ARG_CATEGORY) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val categoryParam = backStackEntry.arguments?.getString(Screen.Services.ARG_CATEGORY)
+                val initialCategory = ServiceCategory.fromNameOrNull(categoryParam)
+
+                ServicesScreen(
+                    initialCategory = initialCategory,
+                    onServiceClick = { serviceId ->
+                        navController.navigate(Screen.Details.createRoute(serviceId))
+                    }
+                )
             }
 
             // ── Search (placeholder — Phase 3) ──────────────────
@@ -131,8 +156,15 @@ fun MServiceApp() {
             }
 
             // ── Details (placeholder — Phase 3) ─────────────────
-            composable(Screen.Details.route) { backStackEntry ->
-                val serviceId = backStackEntry.arguments?.getString("serviceId") ?: ""
+            composable(
+                route = Screen.Details.route,
+                arguments = listOf(
+                    navArgument(Screen.Details.ARG_SERVICE_ID) {
+                        type = NavType.StringType
+                    }
+                )
+            ) { backStackEntry ->
+                val serviceId = backStackEntry.arguments?.getString(Screen.Details.ARG_SERVICE_ID) ?: ""
                 PlaceholderScreen(title = "Service Details", subtitle = "Details for: $serviceId")
             }
         }
