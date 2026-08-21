@@ -1,4 +1,4 @@
-package com.example.mservice_ai_assistant
+package com.julietkioko.mserviceai
 
 import org.junit.Test
 
