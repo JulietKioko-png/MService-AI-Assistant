@@ -210,7 +210,6 @@ private fun CategoryCard(
     }
 }
 
-// ── AI Assistant Promo Card ─────────────────────────────────────────
 
 @Composable
 private fun AssistantPromoCard(onClick: () -> Unit) {

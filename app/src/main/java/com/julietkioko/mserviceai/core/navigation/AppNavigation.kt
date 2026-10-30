@@ -22,7 +22,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.julietkioko.mserviceai.domain.model.ServiceCategory
+import com.julietkioko.mserviceai.presentation.assistant.AssistantScreen
+import com.julietkioko.mserviceai.presentation.details.DetailsScreen
 import com.julietkioko.mserviceai.presentation.home.HomeScreen
+import com.julietkioko.mserviceai.presentation.search.SearchScreen
 import com.julietkioko.mserviceai.presentation.services.ServicesScreen
 
 /**
@@ -145,17 +148,25 @@ fun MServiceApp() {
                 )
             }
 
-            // ── Search (placeholder — Phase 3) ──────────────────
+
             composable(Screen.Search.route) {
-                PlaceholderScreen(title = "Search", subtitle = "Find any service instantly")
+                SearchScreen(
+                    onServiceClick = { serviceId ->
+                        navController.navigate(Screen.Details.createRoute(serviceId))
+                    }
+                )
             }
 
-            // ── Assistant (placeholder — Phase 4) ───────────────
+            // ── Assistant (Phase 4) ─────────────────────────────
             composable(Screen.Assistant.route) {
-                PlaceholderScreen(title = "AI Assistant", subtitle = "Ask me anything about\ngovernment services")
+                AssistantScreen(
+                    onServiceClick = { serviceId ->
+                        navController.navigate(Screen.Details.createRoute(serviceId))
+                    }
+                )
             }
 
-            // ── Details (placeholder — Phase 3) ─────────────────
+            // ── Details (Phase 3) ───────────────────────────────
             composable(
                 route = Screen.Details.route,
                 arguments = listOf(
@@ -165,7 +176,21 @@ fun MServiceApp() {
                 )
             ) { backStackEntry ->
                 val serviceId = backStackEntry.arguments?.getString(Screen.Details.ARG_SERVICE_ID) ?: ""
-                PlaceholderScreen(title = "Service Details", subtitle = "Details for: $serviceId")
+                DetailsScreen(
+                    serviceId = serviceId,
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    onAskAssistantClick = {
+                        navController.navigate(Screen.Assistant.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
             }
         }
     }
