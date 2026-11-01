@@ -1,0 +1,251 @@
+# 🔐 Authentication Implementation Plan — Sign In & Sign Up
+
+## 1. Current Architecture Snapshot
+
+| Layer | Existing Packages | Pattern |
+|---|---|---|
+| **Presentation** | `assistant/`, `home/`, `services/`, `search/`, `details/` | Stateless Composable Screen + ViewModel + UiState data class |
+| **Domain** | `model/`, `repository/` | Interface contracts, data classes |
+| **Data** | `repository/` | In-memory implementations |
+| **Core** | `navigation/`, `ui/theme/` | Single `NavHost` in `MServiceApp`, sealed `Screen` routes, Material 3 theme |
+| **Entry Point** | `MainActivity` | Single-activity, edge-to-edge, delegates to `MServiceApp()` |
+
+**Key conventions already established:**
+- ViewModels use `MutableStateFlow` / `StateFlow` (no LiveData)
+- UI state encapsulated in a dedicated `*UiState` data class
+- Factory pattern for ViewModel construction (`ViewModelProvider.Factory`)
+- Navigation via sealed `Screen` class with type-safe routes
+- Composable screens are stateless — receive callbacks, no direct nav references
+
+---
+
+## 2. Authentication Feature Overview
+
+### What We're Building
+
+A **local-first authentication layer** that gates access to the main app behind a Sign In / Sign Up flow. Authentication state is persisted via Android's `DataStore (Preferences)` — no backend server required for this phase.
+
+> [!NOTE]
+> This plan is designed to be **backend-agnostic**. The domain layer defines interfaces that can later be swapped to Firebase Auth, a custom REST API, or any identity provider without touching the UI layer.
+
+### User Flow
+
+```mermaid
+flowchart TD
+    A["App Launch"] --> B{"User Authenticated?"}
+    B -- Yes --> C["Home Screen (existing)"]
+    B -- No --> D["Sign In Screen"]
+    D -- "Tap 'Sign Up'" --> E["Sign Up Screen"]
+    E -- "Tap 'Sign In'" --> D
+    D -- "Valid Credentials" --> F["Save Auth State"]
+    E -- "Valid Registration" --> F
+    F --> C
+    C -- "Settings > Sign Out" --> G["Clear Auth State"]
+    G --> D
+```
+
+---
+
+## 3. Connectivity & Data Flow Architecture
+
+```mermaid
+graph LR
+    subgraph Presentation["🖥️ Presentation Layer"]
+        SIS["SignInScreen.kt"]
+        SUS["SignUpScreen.kt"]
+        SIVM["SignInViewModel.kt"]
+        SUVM["SignUpViewModel.kt"]
+        SIUS["SignInUiState.kt"]
+        SUUS["SignUpUiState.kt"]
+    end
+
+    subgraph Domain["📐 Domain Layer"]
+        ARI["AuthRepository (interface)"]
+        UM["User (data class)"]
+        AR["AuthResult (sealed class)"]
+    end
+
+    subgraph Data["💾 Data Layer"]
+        LAR["LocalAuthRepository"]
+        ADS["AuthDataStore"]
+    end
+
+    subgraph Core["⚙️ Core Layer"]
+        SCR["Screen.kt (+ SignIn, SignUp routes)"]
+        NAV["AppNavigation.kt (auth NavGraph)"]
+    end
+
+    SIS --> SIVM
+    SUS --> SUVM
+    SIVM --> SIUS
+    SUVM --> SUUS
+    SIVM --> ARI
+    SUVM --> ARI
+    ARI --> UM
+    ARI --> AR
+    LAR -.->|implements| ARI
+    LAR --> ADS
+    NAV --> SIS
+    NAV --> SUS
+    NAV --> SCR
+```
+
+### How Data Flows (Sign In Example)
+
+```
+1. User types email + password → SignInScreen captures input
+2. SignInScreen calls viewModel.onSignIn()
+3. SignInViewModel:
+   a. Validates input (email format, password length)
+   b. Updates UiState → isLoading = true
+   c. Calls authRepository.signIn(email, password)
+4. LocalAuthRepository:
+   a. Checks stored credentials in DataStore
+   b. Returns AuthResult.Success(user) or AuthResult.Error(message)
+5. SignInViewModel:
+   a. On Success → UiState.isAuthenticated = true
+   b. On Error  → UiState.error = "Invalid credentials"
+6. SignInScreen observes UiState:
+   a. isAuthenticated → NavController navigates to Home
+   b. error → Shows Snackbar/inline error
+```
+
+---
+
+## 4. New Files to Create
+
+### Domain Layer (Contracts — no implementation details)
+
+| File | Purpose |
+|---|---|
+| [`domain/model/User.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/domain/model/User.kt) | `data class User(id, name, email)` |
+| [`domain/model/AuthResult.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/domain/model/AuthResult.kt) | `sealed class` — `Success`, `Error`, `Loading` |
+| [`domain/repository/AuthRepository.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/domain/repository/AuthRepository.kt) | Interface: `signIn()`, `signUp()`, `signOut()`, `getCurrentUser()`, `isAuthenticated()` |
+
+### Data Layer (Concrete implementations)
+
+| File | Purpose |
+|---|---|
+| [`data/repository/LocalAuthRepository.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/data/repository/LocalAuthRepository.kt) | Implements `AuthRepository` using DataStore |
+| [`data/local/AuthDataStore.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/data/local/AuthDataStore.kt) | DataStore wrapper — persists user session & hashed credentials |
+
+### Presentation Layer (UI)
+
+| File | Purpose |
+|---|---|
+| [`presentation/auth/SignInScreen.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/presentation/auth/SignInScreen.kt) | Compose UI — email field, password field, sign-in button, link to Sign Up |
+| [`presentation/auth/SignUpScreen.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/presentation/auth/SignUpScreen.kt) | Compose UI — name, email, password, confirm password, register button |
+| [`presentation/auth/SignInViewModel.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/presentation/auth/SignInViewModel.kt) | State management + validation for Sign In |
+| [`presentation/auth/SignUpViewModel.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/presentation/auth/SignUpViewModel.kt) | State management + validation for Sign Up |
+| [`presentation/auth/SignInUiState.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/presentation/auth/SignInUiState.kt) | UI state data class for Sign In |
+| [`presentation/auth/SignUpUiState.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/presentation/auth/SignUpUiState.kt) | UI state data class for Sign Up |
+
+### Files to Modify
+
+| File | Change |
+|---|---|
+| [`Screen.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/core/navigation/Screen.kt) | Add `SignIn` and `SignUp` screen routes |
+| [`AppNavigation.kt`](file:///c:/Mservice-AI-Assistant/app/src/main/java/com/julietkioko/mserviceai/core/navigation/AppNavigation.kt) | Add auth navigation graph, conditional start destination |
+| [`build.gradle.kts`](file:///c:/Mservice-AI-Assistant/app/build.gradle.kts) | Add `datastore-preferences` dependency |
+
+---
+
+## 5. Dependency Addition
+
+```kotlin
+// app/build.gradle.kts — add to dependencies block:
+implementation("androidx.datastore:datastore-preferences:1.1.4")
+```
+
+> [!IMPORTANT]
+> DataStore is the recommended replacement for SharedPreferences. It provides:
+> - Coroutine-based async API (no blocking main thread)
+> - Type safety via Preferences keys
+> - Atomic read-modify-write operations
+
+---
+
+## 6. Validation Rules
+
+| Field | Rules |
+|---|---|
+| **Name** (Sign Up only) | Not blank, ≥ 2 characters |
+| **Email** | Not blank, valid format (`Patterns.EMAIL_ADDRESS`) |
+| **Password** | ≥ 8 characters, at least 1 uppercase, 1 lowercase, 1 digit |
+| **Confirm Password** | Must match Password field |
+
+All validation is performed **client-side** in the ViewModel before calling the repository.
+
+---
+
+## 7. Navigation Integration
+
+### Updated Start Destination Logic
+
+```kotlin
+// In AppNavigation.kt — MServiceApp()
+val isAuthenticated = authViewModel.isAuthenticated.collectAsState()
+
+NavHost(
+    startDestination = if (isAuthenticated.value) Screen.Home.route 
+                       else Screen.SignIn.route,
+    ...
+)
+```
+
+### Auth Graph (nested inside main NavHost)
+
+```kotlin
+// Auth screens — no bottom bar
+composable(Screen.SignIn.route) {
+    SignInScreen(
+        onSignInSuccess = { navController.navigate(Screen.Home.route) { 
+            popUpTo(Screen.SignIn.route) { inclusive = true } 
+        }},
+        onNavigateToSignUp = { navController.navigate(Screen.SignUp.route) }
+    )
+}
+
+composable(Screen.SignUp.route) {
+    SignUpScreen(
+        onSignUpSuccess = { navController.navigate(Screen.Home.route) {
+            popUpTo(Screen.SignIn.route) { inclusive = true }
+        }},
+        onNavigateToSignIn = { navController.popBackStack() }
+    )
+}
+```
+
+### Bottom Bar Visibility
+
+The bottom navigation bar is **hidden** on `SignIn` and `SignUp` screens — the existing `showBottomBar` logic already handles this since auth routes are not in `Screen.bottomNavItems`.
+
+---
+
+## 8. Security Considerations
+
+| Concern | Approach |
+|---|---|
+| Password storage | SHA-256 hashed before storing in DataStore — never stored as plain text |
+| Session persistence | Lightweight token (UUID) stored in DataStore; checked at app start |
+| Sign-out | Clears all auth data from DataStore |
+| Future-proofing | `AuthRepository` interface makes it trivial to swap to Firebase Auth, OAuth, or a REST API |
+
+---
+
+## 9. Execution Order
+
+| Step | Action | Files Touched |
+|---|---|---|
+| **1** | Add DataStore dependency | `build.gradle.kts` |
+| **2** | Create domain models | `User.kt`, `AuthResult.kt` |
+| **3** | Create domain repository interface | `AuthRepository.kt` |
+| **4** | Create data layer (DataStore + implementation) | `AuthDataStore.kt`, `LocalAuthRepository.kt` |
+| **5** | Create UI state classes | `SignInUiState.kt`, `SignUpUiState.kt` |
+| **6** | Create ViewModels | `SignInViewModel.kt`, `SignUpViewModel.kt` |
+| **7** | Create Screen composables | `SignInScreen.kt`, `SignUpScreen.kt` |
+| **8** | Update navigation routes | `Screen.kt` |
+| **9** | Wire auth flow into navigation | `AppNavigation.kt` |
+
+> [!TIP]
+> Each step depends only on the previous ones — this order ensures the code compiles at every step.

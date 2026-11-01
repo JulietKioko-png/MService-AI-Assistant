@@ -10,9 +10,14 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -21,21 +26,31 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.google.firebase.auth.FirebaseAuth
+import com.julietkioko.mserviceai.data.local.AuthPreferencesDataStore
+import com.julietkioko.mserviceai.data.repository.FirebaseAuthRepository
 import com.julietkioko.mserviceai.domain.model.ServiceCategory
+import com.julietkioko.mserviceai.domain.repository.AuthRepository
 import com.julietkioko.mserviceai.presentation.assistant.AssistantScreen
+import com.julietkioko.mserviceai.presentation.auth.SignInScreen
+import com.julietkioko.mserviceai.presentation.auth.SignInViewModel
+import com.julietkioko.mserviceai.presentation.auth.SignUpScreen
+import com.julietkioko.mserviceai.presentation.auth.SignUpViewModel
 import com.julietkioko.mserviceai.presentation.details.DetailsScreen
 import com.julietkioko.mserviceai.presentation.home.HomeScreen
 import com.julietkioko.mserviceai.presentation.search.SearchScreen
 import com.julietkioko.mserviceai.presentation.services.ServicesScreen
+import kotlinx.coroutines.launch
 
 /**
  * Root composable that sets up the app's navigation structure.
  *
  * Architecture decisions:
- * - Uses a single [NavHost] inside a [Scaffold] with a bottom [NavigationBar].
- * - Each bottom-nav tap uses `launchSingleTop = true` and `popUpTo(startDestination)`
- *   to avoid stacking duplicate screens on the back stack.
- * - Centralizes navigation routing and arguments handling across screens.
+ * - Local-first session state with DataStore + Firebase Authentication.
+ * - Dynamic start destination: returning authenticated users go directly to [HomeScreen];
+ *   unauthenticated users are presented with [SignInScreen].
+ * - Bottom navigation is hidden on authentication and detail routes.
+ * - Injects [AuthRepository] into [SignInViewModel] and [SignUpViewModel] via factory pattern.
  */
 @Composable
 fun MServiceApp() {
@@ -43,8 +58,30 @@ fun MServiceApp() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    // Hide bottom bar on detail screens (they have their own back nav)
-    val showBottomBar = Screen.bottomNavItems.any { screen ->
+    val context = LocalContext.current.applicationContext
+    val coroutineScope = rememberCoroutineScope()
+
+    // Auth infrastructure dependencies
+    val dataStore = remember { AuthPreferencesDataStore(context) }
+    val authRepository: AuthRepository = remember {
+        FirebaseAuthRepository(dataStore = dataStore)
+    }
+
+    // Initial check: if Firebase Auth has a cached user or DataStore has session
+    val isInitiallyLoggedIn = remember {
+        FirebaseAuth.getInstance().currentUser != null
+    }
+
+    val cachedUserName by dataStore.userName.collectAsState(initial = "")
+    val resolvedUserName = cachedUserName.ifBlank {
+        FirebaseAuth.getInstance().currentUser?.displayName ?: ""
+    }
+
+    // Determine whether to display the bottom bar (hidden on auth and details)
+    val isAuthScreen = currentDestination?.route == Screen.SignIn.route ||
+            currentDestination?.route == Screen.SignUp.route
+
+    val showBottomBar = !isAuthScreen && Screen.bottomNavItems.any { screen ->
         currentDestination?.hierarchy?.any {
             if (screen == Screen.Services) {
                 it.route?.startsWith(Screen.Services.BASE_ROUTE) == true
@@ -56,7 +93,7 @@ fun MServiceApp() {
 
     Scaffold(
         bottomBar = {
-            if (showBottomBar || currentDestination == null) {
+            if (showBottomBar) {
                 NavigationBar {
                     Screen.bottomNavItems.forEach { screen ->
                         val selected = currentDestination?.hierarchy?.any {
@@ -99,12 +136,49 @@ fun MServiceApp() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Home.route,
+            startDestination = if (isInitiallyLoggedIn) Screen.Home.route else Screen.SignIn.route,
             modifier = Modifier.padding(innerPadding)
         ) {
+            // ── Authentication: Sign In ────────────────────────
+            composable(Screen.SignIn.route) {
+                val signInViewModel: SignInViewModel = viewModel(
+                    factory = SignInViewModel.provideFactory(authRepository)
+                )
+                SignInScreen(
+                    viewModel = signInViewModel,
+                    onSignInSuccess = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.SignIn.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToSignUp = {
+                        navController.navigate(Screen.SignUp.route)
+                    }
+                )
+            }
+
+            // ── Authentication: Sign Up ────────────────────────
+            composable(Screen.SignUp.route) {
+                val signUpViewModel: SignUpViewModel = viewModel(
+                    factory = SignUpViewModel.provideFactory(authRepository)
+                )
+                SignUpScreen(
+                    viewModel = signUpViewModel,
+                    onSignUpSuccess = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.SignIn.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToSignIn = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
             // ── Home ────────────────────────────────────────────
             composable(Screen.Home.route) {
                 HomeScreen(
+                    userName = resolvedUserName,
                     onCategoryClick = { category ->
                         navController.navigate(Screen.Services.createRoute(category)) {
                             popUpTo(navController.graph.findStartDestination().id) {
@@ -121,6 +195,14 @@ fun MServiceApp() {
                             }
                             launchSingleTop = true
                             restoreState = true
+                        }
+                    },
+                    onSignOutClick = {
+                        coroutineScope.launch {
+                            authRepository.signOut()
+                            navController.navigate(Screen.SignIn.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
                         }
                     }
                 )
@@ -148,7 +230,7 @@ fun MServiceApp() {
                 )
             }
 
-
+            // ── Search ──────────────────────────────────────────
             composable(Screen.Search.route) {
                 SearchScreen(
                     onServiceClick = { serviceId ->
@@ -193,24 +275,5 @@ fun MServiceApp() {
                 )
             }
         }
-    }
-}
-
-/**
- * Temporary placeholder for screens that will be built in later phases.
- * Replaced screen-by-screen as each phase is completed.
- */
-@Composable
-private fun PlaceholderScreen(title: String, subtitle: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "$title\n$subtitle",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
     }
 }

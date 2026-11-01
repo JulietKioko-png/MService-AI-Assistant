@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "778307541506",
+    "project_id": "mservice-ai-assistant",
+    "storage_bucket": "mservice-ai-assistant.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:778307541506:android:992a974a4526aafc6ce51b",
+        "android_client_info": {
+          "package_name": "com.julietkioko.mserviceai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCOBFZXHovQQ4ygkCcFXXD0BtObR8UXy54"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

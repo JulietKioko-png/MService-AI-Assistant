@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.julietkioko.mserviceai.domain.model.ServiceCategory
@@ -47,6 +48,12 @@ sealed class Screen(
         /** Build the concrete route for a specific service. */
         fun createRoute(serviceId: String): String = "details/$serviceId"
     }
+
+    /** Authentication screen for existing user login. */
+    data object SignIn : Screen("sign_in", "Sign In", Icons.Filled.Lock)
+
+    /** Authentication screen for new user registration. */
+    data object SignUp : Screen("sign_up", "Sign Up", Icons.Filled.Lock)
 
     companion object {
         /** Screens displayed as tabs in the bottom navigation bar. */

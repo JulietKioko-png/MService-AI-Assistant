@@ -22,7 +22,7 @@ import com.julietkioko.mserviceai.core.ui.theme.MServiceTheme
  * are easier to test, preview, and reuse.
  */
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(savedInstanceState: Bundle?){
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
